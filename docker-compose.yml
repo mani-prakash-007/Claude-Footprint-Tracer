@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./src:/app/src
+      - ./test:/app/test
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./tsup.config.ts:/app/tsup.config.ts
+      - ./vitest.config.ts:/app/vitest.config.ts
+      - agent-trace-data:/app/data
+    environment:
+      - AGENT_TRACE_DB=/app/data/traces.db
+      - AGENT_TRACE_DEBUG=1
+    ports:
+      - "3939:3939"
+    command: npm run dev
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./src:/app/src
+      - ./test:/app/test
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./vitest.config.ts:/app/vitest.config.ts
+    environment:
+      - AGENT_TRACE_DB=:memory:
+    command: npm test
+
+volumes:
+  agent-trace-data:
