@@ -6,12 +6,23 @@ interface ModelPricing {
 }
 
 const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Claude 4.6 family
+  'claude-opus-4-6': { input: 15.0, output: 75.0, cacheRead: 1.5, cacheWrite: 18.75 },
+  'claude-sonnet-4-6': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
+  // Claude 4.5 family
   'claude-sonnet-4-5': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
+  'claude-opus-4-5': { input: 15.0, output: 75.0, cacheRead: 1.5, cacheWrite: 18.75 },
+  // Claude 4 family
   'claude-opus-4': { input: 15.0, output: 75.0, cacheRead: 1.5, cacheWrite: 18.75 },
+  'claude-sonnet-4': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
+  // Claude 3.5 family
   'claude-haiku-3-5': { input: 0.8, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0 },
   'claude-3-5-sonnet': { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
   'claude-3-5-haiku': { input: 0.8, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0 },
   'claude-3-opus': { input: 15.0, output: 75.0, cacheRead: 1.5, cacheWrite: 18.75 },
+  // Haiku 4.5
+  'claude-haiku-4-5': { input: 0.8, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0 },
+  // OpenAI
   'gpt-4o': { input: 2.5, output: 10.0 },
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
   'gpt-4-turbo': { input: 10.0, output: 30.0 },
@@ -39,6 +50,8 @@ export function calculateCost(
 export function formatCost(usd: number): string {
   if (usd === 0) return '$0.000';
   if (usd < 0.001) return `$${usd.toFixed(4)}`;
+  if (usd >= 10) return `$${usd.toFixed(2)}`;
+  if (usd >= 1) return `$${usd.toFixed(3)}`;
   return `$${usd.toFixed(3)}`;
 }
 

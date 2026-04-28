@@ -37,6 +37,13 @@ graph TB
         TUI --> TV[Timeline View]
         TUI --> TK[Token View]
         TUI --> SV[Sessions View]
+        TUI --> DO[Detail Overlay]
+        
+        DB -->|session metadata| TP[Transcript Parser]
+        TF[Transcript JSONL<br/>file on disk] -->|read every 2s| TP
+        TP -->|cost, tokens, model| TUI
+        
+        TUI --> LD[Loop Detection]
     end
 ```
 
@@ -107,7 +114,15 @@ graph TB
 │  │  │ Live     │  │ Waterfall│  │ Per-call │  │ Browse/      │        │ │
 │  │  │ event    │  │ bars     │  │ cost     │  │ switch       │        │ │
 │  │  │ stream   │  │ chart    │  │ table    │  │ sessions     │        │ │
+│  │  │ +loops   │  │          │  │ +transcr │  │              │        │ │
 │  │  └──────────┘  └──────────┘  └──────────┘  └──────────────┘        │ │
+│  │                                                                       │ │
+│  │  ┌─────────────────────┐  ┌────────────────────────────────────┐    │ │
+│  │  │ Detail Overlay       │  │ Transcript Parser                   │    │ │
+│  │  │ (Enter on any span)  │  │ Reads JSONL file every 2s           │    │ │
+│  │  │ Full I/O JSON        │  │ transcript_path from session meta   │    │ │
+│  │  │ Esc/q to close       │  │ → cost, tokens, model, turn count  │    │ │
+│  │  └─────────────────────┘  └────────────────────────────────────┘    │ │
 │  └─────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -191,6 +206,40 @@ sequenceDiagram
     end
 ```
 
+### Transcript Parsing Data Flow (Hook Mode Cost Tracking)
+
+```
+Claude Code writes transcript JSONL file to disk
+     │
+     │  (path stored in every hook stdin as `transcript_path`)
+     │
+     ▼
+Hook Handler (first span)
+     │
+     │  Stores transcript_path in session metadata
+     │  (sessions.metadata JSON column)
+     │
+     ▼
+SQLite sessions table
+     │
+     │  TUI reads session metadata to get transcript_path
+     │
+     ▼
+Transcript Parser (useTranscriptCost hook)
+     │  Reads JSONL file directly from disk every 2s
+     │  Extracts per-turn: model, input_tokens, output_tokens,
+     │    cache_read_input_tokens, cache_creation_input_tokens
+     │  Calculates cost using model-specific pricing
+     │
+     ▼
+TUI receives: total cost, model name, LLM turn count, token breakdown
+     │
+     ├──→ StatusBar: live cost (red >$1, bold >$0.50), model, turns
+     └──→ TokenView: full session summary from transcript
+```
+
+This design keeps expensive transcript parsing in the TUI process (which has time to spare between renders) rather than in the hook handler subprocess (which must complete in <200ms). See ADR-013.
+
 ---
 
 ## Component Architecture
@@ -205,11 +254,15 @@ classDiagram
         -insertSpanStmt: Statement
         -updateSpanStmt: Statement
         -findPendingSpanStmt: Statement
+        -updateSessionMetadataStmt: Statement
+        -findActiveAgentStmt: Statement
         +createSession(params)
         +endSession(sessionId, endedAt)
         +insertSpan(span: SpanEvent)
         +updateSpan(id, updates)
         +findPendingSpan(sessionId, toolName): string|null
+        +updateSessionMetadata(sessionId, metadata)
+        +findActiveAgent(sessionId): string|null
     }
     
     class EventReader {
@@ -220,6 +273,7 @@ classDiagram
         +getSpan(spanId): SpanEvent|null
         +getTokenBreakdown(sessionId): TokenBreakdown[]
         +getLatestSession(): SessionSummary|null
+        +getSessionMetadata(sessionId): object|null
         +close()
     }
     
@@ -240,13 +294,15 @@ classDiagram
 <App>
 ├── <TabBar tabs={['Console','Timeline','Tokens','Sessions']} />
 ├── <ConsoleView>          (when tab === 0)
+│   ├── <LoopWarnings />   (top 3 loop detection warnings)
 │   └── <EventRow /> × N
 ├── <TimelineView>         (when tab === 1)
 │   └── <WaterfallBar /> × N
 ├── <TokenView>            (when tab === 2)
-│   └── <TokenTable />
+│   └── <TokenTable />     (now includes transcript summary in hook mode)
 ├── <SessionListView>      (when tab === 3)
-└── <StatusBar />
+├── <SpanDetail />         (overlay on Enter, Esc/q to close)
+└── <StatusBar />          (live cost, model, LLM turn count)
 ```
 
 ### SDK Wrapper Class Diagram

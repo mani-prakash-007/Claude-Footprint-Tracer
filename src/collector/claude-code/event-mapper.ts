@@ -75,6 +75,7 @@ export function mapHookToSpan(input: HookInput): MapResult {
           cost_usd: null,
           error: null,
           metadata: { cwd: input.cwd, is_agent: input.tool_name === 'Agent' },
+          tool_use_id: input.tool_use_id ?? null,
         },
       };
 

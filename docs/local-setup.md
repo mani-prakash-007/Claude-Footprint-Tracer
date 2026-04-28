@@ -32,7 +32,7 @@ This single command:
 2. Runs `npm install`
 3. Builds all 3 entry points via tsup
 4. Runs TypeScript type checking
-5. Runs the test suite (11 tests)
+5. Runs the test suite (16 tests)
 6. Creates `~/.agent-trace/` data directory
 7. Installs Claude Code hooks into `~/.claude/settings.json` (preserves existing hooks)
 8. Seeds demo data (2 sessions, 13 spans)
@@ -147,12 +147,13 @@ atrace uninstall           # Remove hooks
 |-----|--------|
 | `1` | Console view (live event stream) |
 | `2` | Timeline view (waterfall bars) |
-| `3` | Token view (cost breakdown) |
+| `3` | Token view (cost breakdown -- now works in hook mode via transcript parsing) |
 | `4` | Sessions view (session picker) |
 | `Tab` | Next tab |
 | `j` / `↓` | Scroll down |
 | `k` / `↑` | Scroll up |
-| `Enter` | Select session (in Sessions view) |
+| `Enter` | Open span detail / select session |
+| `Esc` | Close detail overlay |
 | `q` | Quit |
 
 ### SDK Wrapper (For Custom Agents)
@@ -194,6 +195,8 @@ TUI polls SQLite every 100ms (full refresh) → renders live with nesting
 ```
 
 No modification to Claude Code needed. Hooks are passive observers. Paths with spaces are handled correctly in hook commands.
+
+**Token/Cost Data in Hook Mode**: The Tokens tab (Tab 3) now shows full cost and token data for hook mode sessions. The TUI parses Claude Code's transcript JSONL file (path stored in session metadata) every 2 seconds to extract per-turn token usage and calculate costs. The StatusBar also shows live cost, model name, and LLM turn count.
 
 ### SDK Wrapper Mode (Custom Agents)
 

@@ -45,6 +45,7 @@ async function main() {
           source: 'claude_code_hook',
           started_at: result.span.started_at,
           cwd: (result.span.metadata as Record<string, unknown>)?.cwd as string | undefined,
+          metadata: input.transcript_path ? { transcript_path: input.transcript_path } : undefined,
         });
         // Link to active Agent span as parent (sub-agent nesting)
         if (result.span.name !== 'Agent') {

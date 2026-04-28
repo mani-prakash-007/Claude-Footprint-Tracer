@@ -46,6 +46,7 @@ src/
 │   ├── claude-code/            # Hook system
 │   │   ├── hook-handler.ts     # Main subprocess script (stdin → DB)
 │   │   ├── event-mapper.ts     # HookInput → SpanEvent translation
+│   │   ├── transcript-parser.ts # Parse transcript JSONL for cost/token data
 │   │   └── install.ts          # atrace install/uninstall
 │   └── sdk-wrapper/            # Anthropic SDK instrumentation
 │       ├── trace.ts            # trace() function + trace.step()
@@ -55,9 +56,12 @@ src/
 ├── tui/                        # Terminal UI
 │   ├── App.tsx                 # Root, tab routing, input handling
 │   ├── theme.ts                # Colors, symbols
-│   ├── hooks/                  # React hooks (useEvents, useSession, etc.)
+│   ├── hooks/                  # React hooks
+│   │   ├── useTranscriptCost.ts # Polls transcript JSONL for cost/tokens (2s)
+│   │   └── useLoopDetection.ts  # Detects wasteful agent patterns
 │   ├── views/                  # Tab views (Console, Timeline, Tokens, Sessions)
-│   └── components/             # Reusable components
+│   └── components/
+│       └── SpanDetail.tsx      # Detail overlay (Enter on span, Esc to close)
 └── util/                       # Shared utilities
     ├── cost.ts                 # Token → USD calculator
     ├── time.ts                 # Duration/timestamp formatting
@@ -86,6 +90,15 @@ Hooks are subprocess invocations with no shared state. PostToolUse correlates wi
 SELECT id FROM spans WHERE session_id = ? AND name = ? AND status = 'pending'
 ORDER BY started_at DESC LIMIT 1
 ```
+
+### Transcript parsing in TUI, not hook handler
+Expensive transcript JSONL parsing happens in the TUI process (2s polling interval), not the hook subprocess. Hook handler only stores `transcript_path` in session metadata on first span. This preserves the hook's <200ms budget. See ADR-013.
+
+### Smart loop detection
+`useLoopDetection` hook analyzes span patterns to flag wasteful behavior: repeated reads without edits, stuck command retries, repeated errors. Ignores normal dev patterns (iterative edits, read-before-edit). Shows top 3 warnings at top of Console view.
+
+### Detail overlay
+`SpanDetail.tsx` renders a full-screen overlay with span metadata and formatted I/O JSON when Enter is pressed on a span. Esc/q closes it. Works on any span type.
 
 ### Output truncation
 Tool outputs are truncated to 10KB at write time to prevent DB bloat.

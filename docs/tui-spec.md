@@ -19,8 +19,8 @@ The agent-trace TUI is a fullscreen terminal application built with Ink (React f
 │                                                                      │
 │                                                                      │
 ├─────────────────────────────────────────────────────────────────────┤
-│ Session: a3f2c1d8 | Events: 47 | Time: 1m23s | Cost: $0.042        │
-│ q:quit Tab:switch j/k:scroll                          ← StatusBar    │
+│ Session: a3f2c1d8 | Events: 47 | Time: 1m23s | $0.042 | opus-4-6 | 12 turns │
+│ q:quit Tab:switch j/k:scroll Enter:detail              ← StatusBar    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -42,12 +42,14 @@ The agent-trace TUI is a fullscreen terminal application built with Ink (React f
 ├── <TabBar tabs={TABS} activeTab={activeTab} />
 │
 ├── <Box flexGrow={1}>  ← Main content area
-│   ├── if activeTab === 0: <ConsoleView events selectedIndex visibleCount />
+│   ├── if activeTab === 0: <ConsoleView events selectedIndex visibleCount loopWarnings />
 │   ├── if activeTab === 1: <TimelineView events width />
-│   ├── if activeTab === 2: <TokenView events sessionId />
+│   ├── if activeTab === 2: <TokenView events sessionId transcriptCost />
 │   └── if activeTab === 3: <SessionListView sessions selectedIndex onSelect />
 │
-└── <StatusBar sessionId eventCount startedAt totalCost />
+├── if showDetail: <SpanDetail span={selectedSpan} onClose />  (overlay)
+│
+└── <StatusBar sessionId eventCount startedAt totalCost model turnCount />
 ```
 
 ---
@@ -56,10 +58,17 @@ The agent-trace TUI is a fullscreen terminal application built with Ink (React f
 
 ### ConsoleView (Tab 1)
 
-**Purpose**: Live stream of all events, most recent at bottom. Supports nested sub-agent indentation.
+**Purpose**: Live stream of all events, most recent at bottom. Supports nested sub-agent indentation. Shows loop detection warnings at the top when wasteful patterns are detected.
+
+**Loop Detection Warnings** (top of view, max 3 shown):
+- Yellow warnings: same file Read 4+ times without Edit, same Bash/Grep 3+ times
+- Red critical warnings: same Bash command errored 2+ times (with alert indicator)
+- Smart display: shows last 2 path segments, strips `cd "project-path" && ...` prefixes
+- Normal dev patterns are ignored (multiple Edits, read-then-edit)
 
 **Layout**:
 ```
+[!] Read: .../hooks/useEvents.ts read 4x without edit    (loop warning)
 [00:00.120] → User: { message: "find all TODO comments" }
 [00:01.200] → Tool: Grep { pattern: "TODO" }
 [00:02.100] ← Tool: Grep ✓ (0.9s)
@@ -146,9 +155,16 @@ llm:claude-son...      1,800        200     $0.012   claude-sonnet-4-5
 TOTAL                  7,350        800     $0.042
 ```
 
-**Data Source**: Filters events to `kind === 'llm_call'` and aggregates token counts.
+**Data Source**: Filters events to `kind === 'llm_call'` and aggregates token counts. In hook mode, transcript parsing provides a full session summary.
 
-**Note**: Only populated in SDK wrapper mode. Hook mode doesn't capture token counts.
+**Transcript Summary (Hook Mode)**: When `transcript_path` is available in session metadata, the `useTranscriptCost` hook parses the JSONL file every 2 seconds and provides:
+- Total cost (calculated from model-specific pricing)
+- Total input/output/cache tokens
+- LLM turn count
+- Model name
+- Per-turn breakdown
+
+This means the Tokens tab now shows data for hook mode sessions, not just SDK wrapper sessions. Example: a real session showed $108.55 cost, 474 LLM turns, 39.9M cache read tokens.
 
 ---
 
@@ -168,6 +184,47 @@ Sessions
 **Interaction**:
 - `j/k` to navigate
 - `Enter` to switch to selected session (jumps to Console tab)
+
+---
+
+### Detail Overlay
+
+**Purpose**: Full detail panel for any span. Opens as an overlay on top of the current view.
+
+**Trigger**: Press `Enter` on any span in Console view.
+
+**Layout**:
+```
+┌─────────────── Span Detail ────────────────────────────────────────┐
+│ ID:        span-abc-123                                             │
+│ Kind:      tool_use                                                 │
+│ Name:      Grep                                                     │
+│ Status:    ok                                                       │
+│ Duration:  0.9s                                                     │
+│ Model:     —                                                        │
+│ Tokens:    —                                                        │
+│ Cost:      —                                                        │
+│ Error:     —                                                        │
+│ Parent ID: agent-xyz-789                                            │
+│                                                                     │
+│ ── Input ──                                                         │
+│ { "pattern": "TODO", "path": "/project/src" }                      │
+│                                                                     │
+│ ── Output ──                                                        │
+│ "Found 15 matches in 3 files:\n  src/main.ts:12..."                │
+│                                                                     │
+│                                        Esc/q: close                 │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Fields Shown**: ID, kind, name, status, duration, model, tokens, cost, error, parent_id, full input JSON, full output JSON.
+
+**Behavior**:
+- Input/output JSON is formatted and truncated to fit screen height
+- Press `Esc` or `q` to close the overlay and return to the previous view
+- Works on any span type: `tool_use`, `llm_call`, `custom_step`, `user_message`
+
+**Component**: `src/tui/components/SpanDetail.tsx`
 
 ---
 
@@ -205,8 +262,9 @@ useInput((input, key) => {
 | `Tab` | Next tab | Global |
 | `j` / `↓` | Scroll down | Console, Sessions |
 | `k` / `↑` | Scroll up | Console, Sessions |
-| `Enter` | Select / Open detail | Sessions (switches session) |
-| `q` | Quit application | Global |
+| `Enter` | Open detail overlay / Select session | Console (detail), Sessions (switches session) |
+| `Esc` | Close detail overlay | Detail overlay |
+| `q` | Quit application / Close detail overlay | Global / Detail overlay |
 | `r` | Force refresh | Global (planned) |
 | `/` | Search/filter | Global (planned) |
 | `f` | Toggle auto-follow | Console (planned) |
@@ -242,6 +300,37 @@ useInput((input, key) => {
 **Purpose**: Compute aggregated token/cost stats from events array.
 
 **Memoized**: Only recomputes when events array reference changes.
+
+### useTranscriptCost(sessionId)
+
+**Purpose**: Parse Claude Code's transcript JSONL file for real-time cost/token tracking in hook mode.
+
+**Mechanism**:
+1. Read `transcript_path` from session metadata (stored on first span by hook handler)
+2. Every 2 seconds, re-read the JSONL file from disk
+3. Extract per-turn: model, input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens
+4. Calculate cost using model-specific pricing from `src/util/cost.ts`
+
+**Returns**: `{ totalCost, model, turnCount, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens }`
+
+**Polling**: Separate 2-second interval (independent from the 100ms span polling) to avoid excessive file I/O.
+
+### useLoopDetection(events)
+
+**Purpose**: Detect genuinely wasteful agent patterns and surface warnings in Console view.
+
+**What it flags**:
+- Same file Read 4+ times without an Edit between reads (agent confused/stuck)
+- Same Bash command 3+ times (stuck retrying)
+- Same Bash command errored 2+ times (repeating broken command -- critical severity)
+- Same Grep pattern 3+ times (can't find what looking for)
+
+**What it ignores** (normal dev patterns):
+- Multiple Edits to same file (iterative development)
+- `cd "project-path" && ...` prefix (stripped before comparison)
+- Read then Edit same file (read-before-edit pattern)
+
+**Returns**: Array of `{ severity: 'warning' | 'critical', message: string }` (max 3 shown).
 
 ---
 
@@ -310,3 +399,66 @@ Based on One Dark theme (popular in terminals). Works well on both dark and ligh
 - Windowed rendering (only render visible rows)
 - Polling returns early if no new data (0 allocation)
 - SQLite prepared statements (compiled once, reused)
+
+---
+
+## Updated TUI (post-Phase 0–6)
+
+### Tabs (7)
+
+| Key | Tab | Purpose |
+|-----|-----|---------|
+| 1 | Console | Live event stream + loop warnings + selectable rows |
+| 2 | Timeline | Waterfall of spans, indented sub-agents |
+| 3 | Tokens | Cost / cache / thinking dashboard, Tool Cost Breakdown |
+| 4 | Agents | Sub-agent tree with rolled-up tokens, cost, errors |
+| 5 | Context | Context-window timeline + ▼ compaction markers |
+| 6 | Files | File-access heatmap + redundancy + heat bars |
+| 7 | Trends | Last 20 sessions sparklines + side-by-side compare |
+
+Every tab opens with an `InsightsBanner` (chips + threshold alerts).
+
+### Keybinds
+
+| Key | Action |
+|-----|--------|
+| `1`–`7` | Switch tab |
+| `Tab` / `Shift-Tab` | Next / prev tab |
+| `←` / `→` | Prev / next tab |
+| `↑` / `↓` / `j` / `k` | Scroll list |
+| `PgUp` / `PgDn` | Page scroll |
+| `Home` / `End` / `g` / `G` | Top / bottom |
+| `Enter` | Open detail drawer (Console) / load session (Trends) |
+| `Esc` | Close drawer / overlay |
+| `?` | Help overlay |
+| `q` | Close overlay or quit |
+| `Space` | Mark for compare (Trends) |
+| `.` | Toggle Console tail |
+
+### Mouse + touchpad
+
+- Wheel / two-finger scroll: list scroll (3 rows/tick)
+- Click on tab label: switch tab
+- Click outside overlay: close it
+
+Requires SGR mouse mode (auto-enabled by `useMouse`). tmux: `set -g mouse on`. Mosh strips mouse events; keyboard fallback works.
+
+### Insights banners
+
+`useSessionInsights` (pure `computeSessionInsights` for testability) computes:
+- Cost: total / burn $/min / projected 60min / most-expensive turn
+- Cache: hit rate / recent rate / savings $ / breakage alert
+- Context: current / peak / % / compactions
+- Tools: total calls / errors / error rate / most-called / most-expensive
+- Files: read:edit ratio / redundant files / wasted tokens / wasted $
+- Sub-agents: count / delegated cost / delegated share %
+- Quality: thinking redaction rate / pending count
+
+`InsightsBanner` exposes per-tab variants with chip + alert sets.
+
+### Per-tool token attribution (Phase 6)
+
+- Hook propagates `tool_use_id` (Anthropic content-block id) onto every tool span via PreToolUse.
+- `useTokenAttribution` polls transcript every 2 s, walks `tool_use` ↔ `tool_result` block pairs, estimates tokens via `heuristicEstimator` (chars/3.5).
+- Persists `input_token_attribution`, `output_token_attribution`, `attribution_method` columns on spans.
+- `EventRow` shows `~Nk tok` per tool span; `TokenView` adds Tool Cost Breakdown pane with per-tool sort + % bar.

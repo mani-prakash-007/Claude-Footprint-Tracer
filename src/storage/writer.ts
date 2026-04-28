@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { SpanEvent, CollectorSource } from '../types/events.js';
+import type { SpanEvent, CollectorSource, CompactionEvent } from '../types/events.js';
 
 const MAX_OUTPUT_SIZE = 10 * 1024; // 10KB
 
@@ -19,6 +19,12 @@ export class EventWriter {
   private findPendingSpanStmt: Database.Statement;
   private findActiveAgentStmt: Database.Statement;
 
+  private updateSessionMetadataStmt: Database.Statement;
+  private insertCompactionStmt: Database.Statement;
+  private upsertFileAccessStmt: Database.Statement;
+  private updateSpanThinkingStmt: Database.Statement;
+  private updateSpanAttributionStmt: Database.Statement;
+
   constructor(private db: Database.Database) {
     this.insertSessionStmt = db.prepare(`
       INSERT OR IGNORE INTO sessions (session_id, source, started_at, cwd, metadata)
@@ -34,12 +40,14 @@ export class EventWriter {
         id, parent_id, session_id, kind, status, source, name,
         started_at, ended_at, duration_ms, input, output, model,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-        cost_usd, error, metadata
+        cost_usd, error, metadata,
+        thinking_tokens, thinking_redacted, context_tokens, tool_use_id
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?
+        ?, ?, ?,
+        ?, ?, ?, ?
       )
     `);
 
@@ -70,6 +78,40 @@ export class EventWriter {
       WHERE session_id = ? AND name = 'Agent' AND status = 'pending'
       ORDER BY started_at DESC LIMIT 1
     `);
+
+    this.updateSessionMetadataStmt = db.prepare(`
+      UPDATE sessions SET metadata = ? WHERE session_id = ? AND metadata IS NULL
+    `);
+
+    this.insertCompactionStmt = db.prepare(`
+      INSERT OR IGNORE INTO compaction_events
+        (id, session_id, occurred_at, before_tokens, after_tokens, trigger, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    this.upsertFileAccessStmt = db.prepare(`
+      INSERT INTO file_access_counts (session_id, file_path, tool_name, access_count, last_seen_at)
+      VALUES (?, ?, ?, 1, ?)
+      ON CONFLICT(session_id, file_path, tool_name) DO UPDATE SET
+        access_count = access_count + 1,
+        last_seen_at = excluded.last_seen_at
+    `);
+
+    this.updateSpanThinkingStmt = db.prepare(`
+      UPDATE spans SET
+        thinking_tokens = COALESCE(?, thinking_tokens),
+        thinking_redacted = COALESCE(?, thinking_redacted),
+        context_tokens = COALESCE(?, context_tokens)
+      WHERE id = ?
+    `);
+
+    this.updateSpanAttributionStmt = db.prepare(`
+      UPDATE spans SET
+        input_token_attribution = COALESCE(?, input_token_attribution),
+        output_token_attribution = COALESCE(?, output_token_attribution),
+        attribution_method = COALESCE(?, attribution_method)
+      WHERE id = ?
+    `);
   }
 
   createSession(params: CreateSessionParams): void {
@@ -80,6 +122,12 @@ export class EventWriter {
       params.cwd ?? null,
       params.metadata ? JSON.stringify(params.metadata) : null
     );
+    if (params.metadata) {
+      this.updateSessionMetadataStmt.run(
+        JSON.stringify(params.metadata),
+        params.session_id
+      );
+    }
   }
 
   endSession(sessionId: string, endedAt: number): void {
@@ -107,7 +155,11 @@ export class EventWriter {
       span.cache_write_tokens,
       span.cost_usd,
       span.error,
-      span.metadata ? JSON.stringify(span.metadata) : null
+      span.metadata ? JSON.stringify(span.metadata) : null,
+      span.thinking_tokens ?? 0,
+      span.thinking_redacted ?? 0,
+      span.context_tokens ?? null,
+      span.tool_use_id ?? null
     );
   }
 
@@ -139,6 +191,40 @@ export class EventWriter {
   findActiveAgent(sessionId: string): string | null {
     const row = this.findActiveAgentStmt.get(sessionId) as { id: string } | undefined;
     return row?.id ?? null;
+  }
+
+  insertCompactionEvent(event: CompactionEvent): void {
+    this.insertCompactionStmt.run(
+      event.id,
+      event.session_id,
+      event.occurred_at,
+      event.before_tokens,
+      event.after_tokens,
+      event.trigger,
+      event.metadata ? JSON.stringify(event.metadata) : null
+    );
+  }
+
+  upsertFileAccess(sessionId: string, filePath: string, toolName: string, lastSeenAt: number): void {
+    this.upsertFileAccessStmt.run(sessionId, filePath, toolName, lastSeenAt);
+  }
+
+  updateSpanThinking(
+    spanId: string,
+    thinkingTokens: number | null,
+    redacted: number | null,
+    contextTokens: number | null
+  ): void {
+    this.updateSpanThinkingStmt.run(thinkingTokens, redacted, contextTokens, spanId);
+  }
+
+  updateSpanAttribution(
+    spanId: string,
+    inputTokens: number | null,
+    outputTokens: number | null,
+    method: 'heuristic' | 'count_tokens' | null
+  ): void {
+    this.updateSpanAttributionStmt.run(inputTokens, outputTokens, method, spanId);
   }
 }
 

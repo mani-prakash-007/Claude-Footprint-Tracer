@@ -376,3 +376,43 @@ VALUES (?, 'hook', ?, ?)
 | **Require SessionStart event** | Claude Code doesn't fire it. Cannot change Claude Code behavior. |
 | **Pre-create session on TUI launch** | TUI doesn't know about sessions until spans arrive. |
 | **Lazy session in TUI** | Would need to handle missing session in every view. Simpler to guarantee session exists at write time. |
+
+---
+
+## ADR-013: Transcript Parsing in TUI Not Hook Handler
+
+**Date**: 2026-04-19
+**Status**: Accepted
+
+### Context
+Claude Code's transcript JSONL file contains rich per-turn data (model, tokens, cache tokens, cost) that enables real-time cost tracking in hook mode. The question is where to parse this file: in the hook handler subprocess or in the TUI process.
+
+The hook handler has a strict performance budget: <200ms cold start, <500ms total. It runs as a subprocess spawned by Claude Code on every tool call. Any slowdown directly impacts the user's Claude Code experience.
+
+The transcript file grows throughout a session and can become large (thousands of JSONL lines for long sessions). Parsing it requires reading the entire file, parsing each JSON line, and aggregating token counts across all turns.
+
+### Decision
+Parse the transcript JSONL file in the TUI process, not in the hook handler. The hook handler only stores the `transcript_path` in session metadata on the first span. The TUI reads the file directly from disk on a 2-second polling interval via the `useTranscriptCost` hook.
+
+### Implementation
+1. **Hook handler** (`hook-handler.ts`): On first span for a session, stores `transcript_path` from hook stdin into `sessions.metadata` JSON column via `updateSessionMetadata()`.
+2. **Transcript parser** (`transcript-parser.ts`): Pure function that reads JSONL file, extracts per-turn token usage, calculates cost using model-specific pricing.
+3. **TUI hook** (`useTranscriptCost.ts`): Reads session metadata to get path, polls transcript file every 2 seconds, provides cost/token/model data to components.
+
+### Consequences
+- ✅ Hook handler stays fast (<200ms) -- only one extra metadata write on first span
+- ✅ TUI has plenty of time between renders to parse transcript (2s interval vs 100ms render cycle)
+- ✅ Cost data is always fresh (2s max staleness, acceptable for a debugging tool)
+- ✅ No additional subprocess spawning or IPC needed
+- ✅ Transcript parser is a pure function, easy to test (5 tests added)
+- ⚠️ TUI must have filesystem access to the transcript file (same machine requirement, already true for SQLite)
+- ⚠️ 2-second polling means cost display lags slightly behind actual usage
+- ⚠️ Large transcripts (1000+ turns) may cause brief pauses during parsing (mitigated by doing it off the render cycle)
+
+### Alternatives Rejected
+| Approach | Why Rejected |
+|----------|-------------|
+| **Parse in hook handler, write to spans table** | Each hook invocation would need to parse the growing transcript file. A 500-turn session would mean parsing 500 JSONL lines on every tool call. Would blow the 200ms budget. |
+| **Background daemon process** | Over-engineering. Would need process management, IPC, crash recovery. agent-trace is a simple local tool. |
+| **Parse transcript on session end (Stop hook)** | No real-time cost display during session. Users want to see cost while the agent is running, not after. |
+| **Store token data in hook handler from stdin fields** | Hook stdin does not include token/cost data. Only `transcript_path` is provided. The actual token data is only in the transcript file. |

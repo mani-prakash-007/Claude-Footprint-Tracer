@@ -30,5 +30,21 @@ export const symbols = {
   block_full: '\u2588',
   block_light: '\u2591',
   block_medium: '\u2592',
+  pill_dot: '\u25CF',
+  pending_ring: '\u25CC',
+  running: '\u25D0',
+  compaction: '\u25BC',
   spinner: ['\u280b', '\u2819', '\u2839', '\u2838', '\u283c', '\u2834', '\u2826', '\u2827', '\u2807', '\u280f'],
 };
+
+// 9-step sparkline ramp (lowest → highest). Shared by Sparkline component.
+export const SPARKLINE_TICKS = ['_', '\u2581', '\u2582', '\u2583', '\u2584', '\u2585', '\u2586', '\u2587', '\u2588'] as const;
+
+// Gauge segments for percentage bars (htop-style).
+export const GAUGE_SEGMENTS = {
+  full: '\u2588',
+  three: '\u2593',
+  half: '\u2592',
+  light: '\u2591',
+  empty: ' ',
+} as const;

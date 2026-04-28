@@ -2,14 +2,17 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { SpanEvent } from '../../types/events.js';
 import { WaterfallBar } from '../components/WaterfallBar.js';
+import { InsightsBanner } from '../components/InsightsBanner.js';
+import type { SessionInsights } from '../hooks/useSessionInsights.js';
 import { colors } from '../theme.js';
 
 interface TimelineViewProps {
   events: SpanEvent[];
   width: number;
+  insights?: SessionInsights;
 }
 
-export function TimelineView({ events, width }: TimelineViewProps) {
+export function TimelineView({ events, width, insights }: TimelineViewProps) {
   const spans = events.filter((e) => e.kind !== 'session' && e.kind !== 'user_message');
 
   if (spans.length === 0) {
@@ -35,6 +38,7 @@ export function TimelineView({ events, width }: TimelineViewProps) {
 
   return (
     <Box flexDirection="column" paddingX={1}>
+      {insights && <InsightsBanner insights={insights} variant="timeline" />}
       <Text color={colors.primary} bold>Timeline (waterfall)</Text>
       <Text color={colors.border}>{'─'.repeat(Math.min(width - 4, 80))}</Text>
       {spans.map((span) => (

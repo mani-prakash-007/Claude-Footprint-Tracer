@@ -26,6 +26,17 @@
 - [x] Setup auto-installs hooks preserving existing hooks
 - [x] Seed script is `.cjs` (ESM package compatibility)
 - [x] `npm link` for `atrace` binary
+- [x] Real-time cost tracking via transcript JSONL parsing (hook mode now has full cost/token data)
+- [x] Smart loop detection (flags repeated reads without edits, stuck retries, repeated errors)
+- [x] Detail overlay (Enter on any span for full input/output JSON, Esc to close)
+- [x] Transcript parser: `src/collector/claude-code/transcript-parser.ts` (extracts per-turn model, tokens, cache tokens)
+- [x] StatusBar shows live cost (color-coded), model name, LLM turn count
+- [x] TokenView shows full session summary from transcript even in hook mode
+- [x] Loop detection hook: `src/tui/hooks/useLoopDetection.ts` (warning + critical severity)
+- [x] Detail overlay component: `src/tui/components/SpanDetail.tsx`
+- [x] Updated model pricing: claude-opus-4-6, claude-sonnet-4-6, claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5
+- [x] Session metadata: `transcript_path` stored on first span, used by TUI for cost tracking
+- [x] 16 tests (all passing), including 5 new transcript parser tests
 
 ### Known Limitations
 - No context diff between steps
@@ -35,8 +46,6 @@
 - No health check command
 - Token view only shows LLM calls (not tool token contribution)
 - Extended thinking blocks not captured (only available via SDK wrapper, not hooks)
-- No transcript JSONL parsing (token/cost data available in transcript but not yet extracted)
-- No loop detection (repeated tool+args patterns)
 
 ---
 
@@ -44,10 +53,10 @@
 
 **Theme**: Extract actionable insights from traces; address top user pain points
 
-### P0 — High Priority
-- [ ] **Transcript JSONL parsing**: Parse `transcript_path` for real-time cost/token tracking in hook mode (currently only SDK wrapper has this)
-- [ ] **Loop detection**: Detect repeated tool+args patterns and surface warnings (e.g., agent calling same Grep 5 times)
-- [ ] **Detail overlay**: Press Enter on any span to see full input/output JSON
+### P0 — High Priority (all shipped in v0.1.0)
+- [x] **Transcript JSONL parsing**: Parse `transcript_path` for real-time cost/token tracking in hook mode
+- [x] **Loop detection**: Smart detection of wasteful patterns (repeated reads, stuck retries, repeated errors)
+- [x] **Detail overlay**: Press Enter on any span to see full input/output JSON (Esc/q to close)
 - [ ] **Context window meter**: Estimate context window usage from transcript data
 
 ### P1 — Important
@@ -162,7 +171,7 @@ These are ideas worth exploring but not yet committed to a version:
 | **Web UI option** | Medium | localhost:3939 as alternative to TUI |
 | **MCP server mode** | Medium | Expose traces as MCP tools/resources |
 | **Cost alerts** | Low | Notify when session exceeds $X |
-| **Pattern detection** | High | Auto-detect tool call loops, errors (basic loop detection moved to v0.2 P0) |
+| **Pattern detection** | High | Advanced pattern detection beyond current loop detection (e.g., anti-patterns, optimization suggestions) |
 | **Prompt diff** | Medium | Show system prompt changes between calls |
 | **Custom evaluations** | High | Run assertions on tool outputs |
 | **Team sharing** | High | Push sessions to shared Langfuse/Opik instance |

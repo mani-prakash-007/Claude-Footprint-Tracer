@@ -9,22 +9,23 @@
 A local-first, open-source terminal UI (TUI) for debugging and observing AI agent execution. Trace tool calls, monitor token usage, and visualize agent workflows — all from your terminal.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ [1] Console  [2] Timeline  [3] Tokens  [4] Sessions                 │
-├─────────────────────────────────────────────────────────────────────┤
-│ [00:00.120] → User: "find all TODO comments"                        │
-│ [00:01.200] → Tool: Grep { pattern: "TODO" }                        │
-│ [00:02.100] ← Tool: Grep ✓ (15 matches, 0.9s)                      │
-│ [00:02.800] → Tool: Agent { task: "refactor module" }               │
-│ [00:03.000]   └ → Tool: Read { file: "src/main.ts" }               │
-│ [00:03.500]   └ ← Tool: Read ✓ (0.5s)                              │
-│ [00:04.000]   └ → Tool: Edit { file: "src/main.ts" }               │
-│ [00:04.800]   └ ← Tool: Edit ✓ (0.8s)                              │
-│ [00:05.200] ← Tool: Agent ✓ (2.4s)                                  │
-│ [00:05.500] ← LLM claude-sonnet-4-5 (180 tok, $0.012)                  │
-├─────────────────────────────────────────────────────────────────────┤
-│ Session: a3f2c1d8 | Events: 10 | Time: 5.5s | Cost: $0.012         │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [1] Console  [2] Timeline  [3] Tokens  [4] Agents  [5] Context  [6] Files    │
+│ [7] Trends                                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ tools: 12 │ errors: 1 (8%) │ pending: 0 │ top tool: Bash │ redundant: 0      │
+│                                                                              │
+│ ▌● [00:00.120] → User: "find all TODO comments"                              │
+│  ● [00:01.200] → Tool: Grep "TODO" — ●ok 41ms 12 hits ~120 tok               │
+│  ● [00:02.100] → Tool: Read src/main.ts — ●ok 88ms ~1.4k tok                 │
+│  ● [00:02.800] → Agent: refactor module — ◌pending                            │
+│  ●   └ Read src/main.ts — ●ok 66ms ~1.2k tok                                  │
+│  ●   └ Edit src/main.ts — ●ok 220ms ~0.4k tok                                 │
+│  ● [00:05.500] ← LLM sonnet-4-7 (180 tok, $0.012)                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Session: a3f2c1d8 │ sonnet-4-7 │ Events: 12 (3 LLM) │ Ctx: 4% │ Cache: 78%    │
+│ Time: 5.5s │ Cost: $0.012 │ ?:help  Tab/←→:switch  jk↑↓:scroll  q:quit       │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -33,12 +34,35 @@ A local-first, open-source terminal UI (TUI) for debugging and observing AI agen
 
 | Problem | Solution |
 |---------|----------|
-| Can't see what your AI agent is doing in real-time | Live console stream of all tool calls |
-| No idea where tokens are being spent | Per-call token/cost breakdown |
-| Agent debugging requires log-diving | TUI with timeline waterfall view |
+| Can't see what your AI agent is doing in real-time | Live console stream of all tool calls with status pills + selector |
+| No idea where tokens are being spent | Per-tool token attribution + Tool Cost Breakdown pane (heuristic, ~chars/3.5) |
+| Surprise bill at end of session | Burn-rate $/min + projected 60-min cost in Tokens insights banner |
+| Agent keeps repeating the same commands | Smart loop detection flags stuck patterns (not normal dev activity) |
+| Don't know which file is being read 10× | File heatmap with redundancy score + wasted-on-reads $ estimate |
+| Sub-agent calls are invisible | Agents tab with rolled-up cost per delegate + delegated-share % |
+| Auto-compaction silently shrinks context | Context tab with sparkline + ▼ markers + before/after token counts |
+| Cache hit rate breaks mid-session | Cache hit-rate gauge with breakage alert (recent drop >50%) |
+| Want to inspect a specific tool call | Detail overlay: press Enter on any span for full I/O JSON |
 | Existing tools require cloud accounts | 100% local, SQLite-backed, zero infra |
 | Nothing integrates with Claude Code | Native hook integration, zero config |
-| Sub-agent calls are invisible | Nested tree view with `parent_id` linking |
+
+### 7 tabs, every one an insight
+
+| Tab | Insight |
+|-----|---------|
+| Console | Live tool stream + loop warnings + selectable rows |
+| Timeline | Waterfall of spans with sub-agent indentation |
+| Tokens | Cost / cache / thinking dashboard + Tool Cost Breakdown |
+| Agents | Sub-agent tree with rolled-up tokens, cost, errors |
+| Context | Context-window timeline with compaction markers |
+| Files | File-access heatmap with redundancy + heat bars |
+| Trends | Last 20 sessions sparklines + side-by-side compare |
+
+### Keyboard + mouse
+
+`?` help · `1`–`7` jump to tab · `Tab`/`←→` next/prev tab · `↑↓`/`jk` scroll · `PgUp`/`PgDn` page · `Home`/`End`/`g`/`G` top/bottom · `Enter` detail · `Esc` close · `q` quit
+
+Mouse wheel scrolls the active list (3 rows/tick). Click a tab label to switch. Touchpad scroll works on macOS, Linux, and tmux (with `set -g mouse on`).
 
 ---
 
@@ -130,8 +154,9 @@ Browse and switch between recorded sessions.
 | `Tab` | Next tab |
 | `j` / `↓` | Scroll down |
 | `k` / `↑` | Scroll up |
-| `Enter` | Open detail / select session |
-| `q` | Quit |
+| `Enter` | Open span detail overlay / select session |
+| `Esc` | Close detail overlay |
+| `q` | Quit / close detail overlay |
 
 ---
 
@@ -176,14 +201,25 @@ Both collection modes write to the same SQLite database. The TUI polls it on a 1
 
 ---
 
+## Recently Shipped
+
+### Real-time Cost Tracking
+Parses Claude Code's transcript JSONL file for live cost/token data. StatusBar shows cost (turns red >$1, bold >$0.50), model name, and LLM turn count. Supports claude-opus-4-6, claude-sonnet-4-6, claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5, and older models. Real example: one session tracked $108.55 across 474 LLM turns with 39.9M cache read tokens.
+
+### Smart Loop Detection
+Flags genuinely wasteful patterns at the top of Console view -- same file read 4+ times without edit, same command retried 3+ times, same error repeated 2+ times. Ignores normal dev activity like iterative edits. Warning (yellow) and critical (red) severity levels.
+
+### Detail Overlay
+Press Enter on any span in Console view for a full detail panel showing ID, kind, status, duration, model, tokens, cost, error, parent_id, and formatted input/output JSON. Press Esc or q to close.
+
 ## What's Next
 
-The next release (v0.2.0) focuses on extracting actionable insights from traces. Key planned features:
+The remaining v0.2.0 features focus on deeper insights:
 
-- **Transcript JSONL parsing** -- Claude Code writes a transcript file with full token/cost data. Parsing it unlocks real-time cost tracking in hook mode (currently only available in SDK wrapper mode).
-- **Loop detection** -- Automatically detect when an agent is stuck repeating the same tool calls.
-- **Detail overlay** -- Press Enter on any span to see full input/output JSON.
 - **Context window meter** -- Estimate how full the context window is from transcript data.
+- **Session comparison** -- `atrace diff <session1> <session2>` CLI command.
+- **Search/filter** -- `/` to filter spans by tool name or content.
+- **Config file** -- `~/.agent-trace/config.json` for poll interval, DB path, theme.
 
 See [docs/roadmap.md](docs/roadmap.md) for the full roadmap and [docs/user-pain-points-research.md](docs/user-pain-points-research.md) for the research behind these priorities.
 

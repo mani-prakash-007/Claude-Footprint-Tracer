@@ -222,17 +222,25 @@ Every hook event includes a `transcript_path` field pointing to a JSONL file tha
 - **System prompt**
 - **Full conversation context**
 
-### Current Status
-The transcript file is **not yet parsed** by agent-trace. This is a planned P0 feature for v0.2.0.
+### Implementation (Shipped)
 
-### Future Capabilities (via transcript parsing)
-| Feature | Data Source |
-|---------|-------------|
-| Real-time cost/token tracking in hook mode | Token counts per message in transcript |
-| Context window meter | Cumulative token counts |
-| Model attribution | Model field per message |
-| Loop detection | Repeated tool+args patterns |
-| Session cost comparison | Aggregated token costs |
+The `transcript_path` is now actively used by agent-trace:
+
+1. **Hook handler** stores `transcript_path` in session metadata on the first span received for a session. This is written to the `metadata` JSON column of the `sessions` table.
+2. **TUI** reads session metadata via `EventReader.getSessionMetadata()` to retrieve the `transcript_path`.
+3. **Transcript parser** (`src/collector/claude-code/transcript-parser.ts`) reads the JSONL file directly from disk every 2 seconds.
+4. **useTranscriptCost hook** (`src/tui/hooks/useTranscriptCost.ts`) drives the polling and provides cost/token data to StatusBar and TokenView.
+
+This design keeps expensive file parsing in the TUI process rather than the hook handler subprocess, preserving the hook's <200ms budget. See ADR-013.
+
+### Capabilities (via transcript parsing)
+| Feature | Status | Data Source |
+|---------|--------|-------------|
+| Real-time cost/token tracking in hook mode | Shipped | Token counts per message in transcript |
+| Model attribution | Shipped | Model field per message |
+| LLM turn counting | Shipped | Count of assistant messages with usage |
+| Context window meter | Planned | Cumulative token counts |
+| Session cost comparison | Planned | Aggregated token costs |
 
 ### Transcript Format
 The file is JSONL (one JSON object per line). Each line represents a conversation turn or event. The exact schema is not yet formally documented by Anthropic but includes `role`, `content`, `usage`, and `model` fields.
@@ -267,10 +275,10 @@ These are things we CANNOT observe through the hook system alone (but may be ava
 | Permission decisions | PermissionRequest hook exists but we don't use it | N/A |
 
 ### Implications for agent-trace (current state)
-- Token/cost tracking only works in SDK wrapper mode (not hook mode) -- transcript parsing will fix this
+- Token/cost tracking now works in both hook mode (via transcript parsing) and SDK wrapper mode
 - Console view in hook mode shows tool calls but NOT LLM responses
-- Model attribution not available in hook mode -- transcript parsing will fix this
-- Cost column is empty for hook-collected sessions -- transcript parsing will fix this
+- Model attribution now available in hook mode via transcript parsing
+- Cost is now shown for hook-collected sessions in StatusBar and TokenView
 
 ---
 

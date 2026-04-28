@@ -7,6 +7,7 @@ export interface HookInput {
   tool_name?: string;
   tool_input?: Record<string, unknown>;
   tool_response?: unknown;
+  tool_use_id?: string;
   user_prompt?: string;
   agent_id?: string;
   agent_type?: string;

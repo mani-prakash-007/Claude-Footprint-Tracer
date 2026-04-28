@@ -1,0 +1,71 @@
+#!/usr/bin/env expect -f
+# Realtime TUI smoke. Captures all output via log_file (flushed continuously).
+
+set timeout 6
+log_user 0
+log_file -a -noappend /tmp/at-smoke.log
+
+set env(AGENT_TRACE_DB) "/tmp/atrace-exp.db"
+file delete -force "/tmp/atrace-exp.db"
+file delete -force "/tmp/atrace-exp.db-shm"
+file delete -force "/tmp/atrace-exp.db-wal"
+
+set FAILED 0
+proc check {label re} {
+  expect {
+    -re $re { puts "  ok: $label" }
+    timeout { puts "  FAIL: $label"; incr ::FAILED }
+  }
+}
+
+puts "STEP 1: spawn"
+spawn -noecho npm run atrace --silent
+
+# Give Ink a moment to mount
+sleep 2
+
+puts "STEP 2: chrome rendered"
+check "Console tab in tab strip" {Console}
+check "tab strip has 7 tabs" {Trends}
+check "empty-state prompt"      {Waiting for events}
+
+puts "STEP 3: status bar"
+check "status bar key hint"     {q:quit}
+
+puts "STEP 4: ? opens help"
+send "?"
+sleep 0.4
+check "help overlay rendered"   {Keyboard}
+
+puts "STEP 5: Esc closes help"
+send "\033"
+sleep 0.4
+check "back to console"         {Waiting for events}
+
+puts "STEP 6: right-arrow switches tab"
+send "\033\[C"
+sleep 0.4
+# Active tab now Timeline — title may render
+check "Timeline view shown"     {Timeline}
+
+puts "STEP 7: q quits"
+send "q"
+expect {
+  eof { puts "  ok: clean exit" }
+  timeout {
+    puts "  FAIL: did not exit on q"
+    incr FAILED
+    exec kill -9 [exp_pid]
+  }
+}
+
+file delete -force "/tmp/atrace-exp.db"
+file delete -force "/tmp/atrace-exp.db-shm"
+file delete -force "/tmp/atrace-exp.db-wal"
+
+if {$FAILED > 0} {
+  puts "RESULT: $FAILED FAILURES"
+  exit 1
+}
+puts "RESULT: PASS"
+exit 0

@@ -19,7 +19,32 @@ export interface SpanRow {
   cost_usd: number | null;
   error: string | null;
   metadata: string | null;
+  thinking_tokens: number | null;
+  thinking_redacted: number | null;
+  context_tokens: number | null;
+  tool_use_id: string | null;
+  input_token_attribution: number | null;
+  output_token_attribution: number | null;
+  attribution_method: string | null;
   rowid?: number;
+}
+
+export interface CompactionRow {
+  id: string;
+  session_id: string;
+  occurred_at: number;
+  before_tokens: number | null;
+  after_tokens: number | null;
+  trigger: string | null;
+  metadata: string | null;
+}
+
+export interface FileAccessCountRow {
+  session_id: string;
+  file_path: string;
+  tool_name: string;
+  access_count: number;
+  last_seen_at: number;
 }
 
 export interface SessionRow {
