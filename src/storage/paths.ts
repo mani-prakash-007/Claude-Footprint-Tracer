@@ -1,13 +1,12 @@
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { getDataDir as getLifecycleDataDir } from '../lifecycle/paths.js';
 
-const DATA_DIR = join(homedir(), '.agent-trace');
 const DB_FILE = 'traces.db';
 
 export function getDbPath(): string {
-  return process.env.AGENT_TRACE_DB ?? join(DATA_DIR, DB_FILE);
+  return process.env.AGENT_TRACE_DB ?? join(getLifecycleDataDir(), DB_FILE);
 }
 
 export function getDataDir(): string {
-  return DATA_DIR;
+  return getLifecycleDataDir();
 }

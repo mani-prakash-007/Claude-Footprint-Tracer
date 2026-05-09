@@ -1,7 +1,7 @@
 {
-  "name": "agent-trace",
+  "name": "claude-atrace",
   "version": "0.1.0",
-  "description": "Chrome DevTools for AI agents — terminal UI for execution tracing",
+  "description": "Chrome DevTools for AI agents — terminal UI for tracing Claude Code tool calls, tokens, and cost.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,6 +20,8 @@
   "files": [
     "dist/",
     "bin/",
+    "scripts/postinstall.cjs",
+    "scripts/preuninstall.cjs",
     "README.md",
     "LICENSE"
   ],
@@ -30,7 +32,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "atrace": "tsx src/cli.tsx"
+    "atrace": "tsx src/cli.tsx",
+    "postinstall": "node scripts/postinstall.cjs",
+    "preuninstall": "node scripts/preuninstall.cjs",
+    "prepublishOnly": "npm test && npm run build"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
@@ -64,8 +69,31 @@
     "node": ">=18.0.0"
   },
   "keywords": [
-    "ai", "agent", "devtools", "tracing", "tui", "terminal",
-    "claude", "anthropic", "debugging", "observability"
+    "claude",
+    "claude-code",
+    "anthropic",
+    "ai",
+    "agent",
+    "devtools",
+    "tracing",
+    "tui",
+    "terminal",
+    "debugging",
+    "observability",
+    "tool-calls",
+    "tokens"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "mani-prakash-007",
+  "homepage": "https://github.com/mani-prakash-007/Claude-Footprint-Tracer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mani-prakash-007/Claude-Footprint-Tracer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mani-prakash-007/Claude-Footprint-Tracer/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
