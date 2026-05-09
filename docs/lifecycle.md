@@ -8,7 +8,7 @@ For end-user instructions, see [README.md](../README.md). For the high-level des
 
 ## 1. Goals
 
-1. **One-command install.** `npm install -g agent-trace` registers Claude Code hooks via npm `postinstall`. Users do not run a second command in the happy path.
+1. **One-command install.** `npm install -g claude-atrace` registers Claude Code hooks via npm `postinstall`. Users do not run a second command in the happy path.
 2. **Reversible by default.** Every artifact written by setup is removable by uninstall. No orphaned config, no lingering shell modifications.
 3. **Survives `npm rm -g`** even when npm skips lifecycle scripts (which is common for global packages). Achieved via stable runtime path + self-healing handler.
 4. **Atomic, transactional.** Setup either fully succeeds or rolls back. Backups before any settings.json mutation. Manifest tracks what was written.
@@ -61,10 +61,10 @@ Transitions:
 
 | Trigger                          | From         | To             | Code path                                      |
 |----------------------------------|--------------|----------------|------------------------------------------------|
-| `npm install -g agent-trace`     | uninstalled  | alive          | `scripts/postinstall.cjs` → `setup()`          |
+| `npm install -g claude-atrace`     | uninstalled  | alive          | `scripts/postinstall.cjs` → `setup()`          |
 | `atrace setup`                   | any          | alive          | `src/cli.tsx` → `lifecycle/setup.ts`           |
 | `atrace uninstall`               | alive/stale  | uninstalled    | `src/cli.tsx` → `lifecycle/uninstall.ts`       |
-| `npm rm -g agent-trace`          | alive        | stale          | npm skips preuninstall — package files vanish  |
+| `npm rm -g claude-atrace`          | alive        | stale          | npm skips preuninstall — package files vanish  |
 | Claude tool call after `npm rm`  | stale        | uninstalled    | `standalone-handler` self-heal preamble        |
 | `atrace doctor --fix`            | stale        | uninstalled    | `lifecycle/doctor.ts`                          |
 
@@ -75,7 +75,7 @@ Transitions:
 ### Inside the npm package
 
 ```
-agent-trace/
+claude-atrace/
 ├── bin/
 │   └── atrace.js                      # tiny CJS shim → dist/cli.js
 ├── dist/                              # tsup output
@@ -135,7 +135,7 @@ The hook command points to `~/.agent-trace/bin/hook-handler.cjs` — **not** int
 
 | Aspect           | Behavior |
 |------------------|----------|
-| Trigger          | `npm install -g agent-trace` (and `npm i` in this repo unless `--ignore-scripts`) |
+| Trigger          | `npm install -g claude-atrace` (and `npm i` in this repo unless `--ignore-scripts`) |
 | Skip conditions  | `AGENT_TRACE_SKIP_POSTINSTALL=1`, `AGENT_TRACE_DISABLE_POSTINSTALL=1`, `npm_config_global !== 'true'` |
 | Behavior on TTY  | Prompts user via `setup()` |
 | Behavior off TTY | `yes: true` (no prompt) — postinstall must not block CI |
@@ -148,7 +148,7 @@ The hook command points to `~/.agent-trace/bin/hook-handler.cjs` — **not** int
 
 | Aspect          | Behavior |
 |-----------------|----------|
-| Trigger         | `npm rm -g agent-trace` (often skipped — npm doesn't reliably fire this for globals) |
+| Trigger         | `npm rm -g claude-atrace` (often skipped — npm doesn't reliably fire this for globals) |
 | Skip conditions | `npm_config_global !== 'true'` |
 | Behavior        | Calls `uninstall({ yes: true })` |
 | Failure mode    | Catches all errors, exits 0 — handler still self-heals if this skipped |
@@ -245,7 +245,7 @@ Doctor is the user-facing recovery surface for the failure modes in §8.
 
 ## 5. Self-Heal Protocol
 
-Goal: even if the user runs `npm rm -g agent-trace` without `atrace uninstall`, the next Claude Code tool call cleans up after itself.
+Goal: even if the user runs `npm rm -g claude-atrace` without `atrace uninstall`, the next Claude Code tool call cleans up after itself.
 
 ### Why it works
 
@@ -256,7 +256,7 @@ The hook command in `settings.json` points to `~/.agent-trace/bin/hook-handler.c
 ```json
 {
   "pkgVersion": "0.1.0",
-  "pkgRoot":    "/usr/local/lib/node_modules/agent-trace",
+  "pkgRoot":    "/usr/local/lib/node_modules/claude-atrace",
   "writtenAt":  "2026-05-09T09:43:00.000Z"
 }
 ```

@@ -1,4 +1,4 @@
-# agent-trace
+# claude-atrace
 
 **Chrome DevTools for AI agents — in your terminal.**
 
@@ -30,7 +30,7 @@ A local-first, open-source terminal UI (TUI) for debugging and observing AI agen
 
 ---
 
-## Why agent-trace?
+## Why claude-atrace?
 
 | Problem | Solution |
 |---------|----------|
@@ -71,7 +71,7 @@ Mouse wheel scrolls the active list (3 rows/tick). Click a tab label to switch. 
 ### Install
 
 ```bash
-npm install -g agent-trace
+npm install -g claude-atrace
 ```
 
 That's it. The npm `postinstall` script registers Claude Code hooks in `~/.claude/settings.json` automatically. Audit the result:
@@ -98,7 +98,7 @@ atrace             # open the TUI on the latest session
 ### Mode 2: Instrument Your Own Agent
 
 ```typescript
-import { trace } from 'agent-trace';
+import { trace } from 'claude-atrace';
 import Anthropic from '@anthropic-ai/sdk';
 
 const client = trace(new Anthropic());
@@ -190,7 +190,7 @@ Browse and switch between recorded sessions.
 ```bash
 atrace uninstall              # remove hooks, keep ~/.agent-trace traces
 atrace uninstall --purge      # remove hooks AND wipe ~/.agent-trace
-npm uninstall -g agent-trace  # also fine — handler self-cleans on next Claude run
+npm uninstall -g claude-atrace  # also fine — handler self-cleans on next Claude run
 ```
 
 If you forgot `atrace uninstall` and ran `npm uninstall -g` first, the standalone hook handler at `~/.agent-trace/bin/hook-handler.cjs` self-heals on the next Claude tool call: it detects the package is gone, strips its own entries from `settings.json`, and removes the leftover state directory. No manual cleanup needed. Run `atrace doctor --fix` from any subsequent install to verify.
@@ -294,7 +294,7 @@ See [docs/decisions.md](docs/decisions.md) for Architecture Decision Records.
 
 ```bash
 git clone <repo>
-cd agent-trace
+cd Claude-Footprint-Tracer
 npm install
 npm test           # Run tests
 npm run build      # Build with tsup

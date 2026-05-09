@@ -10,7 +10,7 @@ import type { SpanStatus } from '../../types/events.js';
  * Wrap an Anthropic SDK client to auto-trace all API calls.
  *
  * Usage:
- *   import { trace } from 'agent-trace';
+ *   import { trace } from 'claude-atrace';
  *   import Anthropic from '@anthropic-ai/sdk';
  *   const client = trace(new Anthropic());
  */

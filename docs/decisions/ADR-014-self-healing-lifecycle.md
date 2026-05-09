@@ -9,14 +9,14 @@
 `atrace` registers four hook entries (PreToolUse, PostToolUse, UserPromptSubmit, Stop) in Claude Code's `~/.claude/settings.json`. Each entry stores the command Claude should spawn for that event. Until this ADR, that command pointed inside the npm package's `node_modules` directory:
 
 ```
-node /usr/local/lib/node_modules/agent-trace/dist/collector/claude-code/hook-handler.js
+node /usr/local/lib/node_modules/claude-atrace/dist/collector/claude-code/hook-handler.js
 ```
 
-The original install function had no atomic writes, no backups, no rollback, and no test coverage. More critically: `package.json` had no `postinstall` or `preuninstall` scripts, so the user had to manually run `atrace install`, and `npm uninstall -g agent-trace` deleted the package files but left the hook entries in `settings.json` pointing at a path that no longer existed. Every subsequent tool call in Claude Code surfaced an error.
+The original install function had no atomic writes, no backups, no rollback, and no test coverage. More critically: `package.json` had no `postinstall` or `preuninstall` scripts, so the user had to manually run `atrace install`, and `npm uninstall -g claude-atrace` deleted the package files but left the hook entries in `settings.json` pointing at a path that no longer existed. Every subsequent tool call in Claude Code surfaced an error.
 
 We need:
 
-1. Auto-registration on `npm install -g agent-trace`.
+1. Auto-registration on `npm install -g claude-atrace`.
 2. A reverse path that survives `npm uninstall -g` even when npm skips lifecycle scripts (which it commonly does for global packages).
 3. Atomic, transactional setup with rollback and idempotency.
 
@@ -59,7 +59,7 @@ Setup follows: detect → read → diff → confirm → backup → atomic copy h
 ## Consequences
 
 **Positive:**
-- `npm rm -g agent-trace` no longer leaves the user with a broken Claude Code session, even without running `atrace uninstall` first.
+- `npm rm -g claude-atrace` no longer leaves the user with a broken Claude Code session, even without running `atrace uninstall` first.
 - Transactional installs prevent half-applied state.
 - Backup before every settings mutation.
 - Tests now cover lifecycle (zero before).

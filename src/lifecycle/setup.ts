@@ -181,7 +181,7 @@ function findPkgRoot(): string | null {
     if (existsSync(pkg)) {
       try {
         const data = JSON.parse(readFileSync(pkg, 'utf-8')) as { name?: string };
-        if (data.name === 'agent-trace') return dir;
+        if (data.name === 'claude-atrace') return dir;
       } catch {
         // continue walking
       }
