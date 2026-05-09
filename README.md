@@ -74,15 +74,25 @@ Mouse wheel scrolls the active list (3 rows/tick). Click a tab label to switch. 
 npm install -g agent-trace
 ```
 
-### Mode 1: Observe Claude Code Sessions
+That's it. The npm `postinstall` script registers Claude Code hooks in `~/.claude/settings.json` automatically. Audit the result:
 
 ```bash
-# Install hooks into Claude Code
-atrace install --user
+atrace doctor      # confirms install is healthy
+atrace             # opens the TUI
+```
 
-# Use Claude Code normally in any terminal...
-# Then open the TUI in another terminal:
-atrace
+If your environment skips lifecycle scripts (CI sandboxes, `--ignore-scripts`, some pnpm setups), finish setup manually:
+
+```bash
+atrace setup       # idempotent — safe to re-run
+```
+
+### Mode 1: Observe Claude Code Sessions
+
+After install, just use Claude Code normally — every tool call is traced. Then in any other terminal:
+
+```bash
+atrace             # open the TUI on the latest session
 ```
 
 ### Mode 2: Instrument Your Own Agent
@@ -162,17 +172,48 @@ Browse and switch between recorded sessions.
 
 ## CLI Commands
 
+| Command | Purpose |
+|---------|---------|
+| `atrace` | Open the TUI (auto-detects latest session) |
+| `atrace setup [--user\|--project] [--yes] [--dry-run] [--force]` | Register Claude Code hooks (auto-run on install) |
+| `atrace install` | Alias of `setup` (back-compat) |
+| `atrace uninstall [--yes] [--purge]` | Remove hooks; `--purge` also wipes traces DB |
+| `atrace doctor [--fix]` | Diagnose stale state, optionally repair |
+| `atrace sessions` | List recorded sessions |
+| `atrace --session <id>` | Open TUI for a specific session |
+| `atrace --db <path>` | Use a custom database file |
+| `atrace --poll-interval <ms>` | Custom TUI poll rate (default 100) |
+| `atrace hook` | (internal) hook handler subprocess |
+
+### Uninstalling
+
 ```bash
-atrace                      # Open TUI (auto-detects latest session)
-atrace --session <id>       # View specific session
-atrace --db /path/to.db     # Use custom database
-atrace --poll-interval 200  # Custom poll rate (ms)
-atrace install              # Install hooks (project scope)
-atrace install --user       # Install hooks (user scope)
-atrace uninstall            # Remove hooks
-atrace sessions             # List all recorded sessions
-atrace hook                 # (internal) hook handler subprocess
+atrace uninstall              # remove hooks, keep ~/.agent-trace traces
+atrace uninstall --purge      # remove hooks AND wipe ~/.agent-trace
+npm uninstall -g agent-trace  # also fine — handler self-cleans on next Claude run
 ```
+
+If you forgot `atrace uninstall` and ran `npm uninstall -g` first, the standalone hook handler at `~/.agent-trace/bin/hook-handler.cjs` self-heals on the next Claude tool call: it detects the package is gone, strips its own entries from `settings.json`, and removes the leftover state directory. No manual cleanup needed. Run `atrace doctor --fix` from any subsequent install to verify.
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|------|
+| `npm install -g` shows no hook setup output | Postinstall was skipped (CI, `--ignore-scripts`, no TTY). Run `atrace setup`. |
+| Postinstall ran under `sudo` and hooks landed in root's home | Reinstall without sudo (use `nvm`/`volta`), or copy `~/.claude/settings.json` into your real user's home and re-run `atrace setup`. |
+| `~/.claude/settings.json` is corrupt | `atrace doctor --fix` restores from the latest backup at `~/.agent-trace/state/settings.backup.*`. |
+| Claude Code reports a missing hook handler | Run `atrace doctor --fix` (or `atrace setup --force` if the package is still installed). |
+| Permission denied writing settings.json | Fix `~/.claude/` ownership; do not run `atrace setup` with sudo. |
+| Want to confirm what's installed | `atrace doctor` prints every check + status. |
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AGENT_TRACE_DB` | `~/.agent-trace/traces.db` | Custom database path |
+| `AGENT_TRACE_HOME` | `~/.agent-trace/` | Override the data + bin + state directory |
+| `AGENT_TRACE_DEBUG` | unset | Enable debug logging to `~/.agent-trace/debug.log` |
+| `AGENT_TRACE_SKIP_POSTINSTALL` | unset | Set to `1` to disable npm postinstall auto-setup |
 
 ---
 
@@ -237,20 +278,11 @@ docker compose up test
 
 ---
 
-## Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AGENT_TRACE_DB` | `~/.agent-trace/traces.db` | Custom database path |
-| `AGENT_TRACE_DEBUG` | unset | Enable debug logging to `~/.agent-trace/debug.log` |
-
----
-
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) for full system design.
+
+See [docs/lifecycle.md](docs/lifecycle.md) for install/uninstall/self-heal internals.
 
 See [docs/research.md](docs/research.md) for market research and competitive analysis.
 

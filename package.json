@@ -20,6 +20,7 @@
   "files": [
     "dist/",
     "bin/",
+    "scripts/",
     "README.md",
     "LICENSE"
   ],
@@ -30,7 +31,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "atrace": "tsx src/cli.tsx"
+    "atrace": "tsx src/cli.tsx",
+    "postinstall": "node scripts/postinstall.cjs",
+    "preuninstall": "node scripts/preuninstall.cjs"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
